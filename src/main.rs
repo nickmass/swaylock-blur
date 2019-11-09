@@ -9,6 +9,10 @@ struct Args {
     #[structopt(long = "blur-sigma", default_value = "20")]
     blur_sigma: usize,
 
+    /// Image to be used when displays cannot be captured
+    #[structopt(long = "fallback-image")]
+    fallback_image: Option<String>,
+
     /// Must be preceded by `--`
     swaylock_args: Vec<String>,
 }
@@ -41,12 +45,19 @@ fn main() {
             .to_string_lossy()
             .to_string();
         File::create(&screenshot_path_string).expect("failed to create tempfile");
-        Command::new("grim")
+        let grim_success = Command::new("grim")
             .args(&["-o", &output.name, &screenshot_path_string])
             .spawn()
             .expect("failed to execute grim")
             .wait()
-            .expect("failed to wait on grim");
+            .expect("failed to wait on grim")
+            .success();
+        if !grim_success {
+            if let Some(fallback) = args.fallback_image.as_ref() {
+                std::fs::copy(fallback, &screenshot_path_string)
+                    .expect("failed to copy fallback image");
+            }
+        }
         Command::new("ffmpeg")
             .args(&[
                 "-loglevel",
